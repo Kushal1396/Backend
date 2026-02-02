@@ -25,7 +25,8 @@ exports.generatePassportPhoto = async (req, res) => {
         res.send(passportPhotoBuffer);
 
     } catch (error) {
-        console.error('Passport photo generation error:', error.message);
+        console.error('❌ Passport processing error:', error);
+        console.error('Stack trace:', error.stack);
 
         // Log error to database
         try {
@@ -43,7 +44,8 @@ exports.generatePassportPhoto = async (req, res) => {
 
         res.status(500).json({
             status: 'error',
-            message: error.message || 'Failed to generate passport photo'
+            error: error.message || 'Failed to generate passport photo',
+            message: 'Passport photo processing failed. Please try again with a different image.'
         });
     }
 };

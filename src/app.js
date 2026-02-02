@@ -8,6 +8,9 @@ const pdfRoutes = require('./routes/pdfRoutes');
 
 const app = express();
 
+// Trust proxy - required for Render deployment
+app.set('trust proxy', 1);
+
 // Security middleware
 applySecurity(app);
 

@@ -1,111 +1,35 @@
 const sharp = require('sharp');
-const { FaceDetector, FilesetResolver } = require('@mediapipe/tasks-vision');
 const { removeBackground } = require('@imgly/background-removal-node');
 const fs = require('fs').promises;
-const path = require('path');
-
-let faceDetector = null;
 
 /**
- * Initialize MediaPipe Face Detector
+ * Calculate center crop area for passport photo
+ * This uses a simple center crop approach instead of face detection
  */
-async function initializeFaceDetector() {
-    if (faceDetector) return faceDetector;
+function calculateCenterCrop(imageWidth, imageHeight) {
+    // Passport photo aspect ratio (35mm x 45mm = 0.778)
+    const targetAspectRatio = 35 / 45;
 
-    try {
-        const vision = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-        );
+    let cropWidth, cropHeight;
 
-        faceDetector = await FaceDetector.createFromOptions(vision, {
-            baseOptions: {
-                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
-                delegate: "CPU"
-            },
-            runningMode: "IMAGE"
-        });
-
-        console.log('✅ Face Detector initialized');
-        return faceDetector;
-    } catch (error) {
-        console.error('❌ Face Detector initialization failed:', error.message);
-        throw error;
+    // Determine crop dimensions based on image orientation
+    if (imageWidth / imageHeight > targetAspectRatio) {
+        // Image is wider than passport ratio
+        cropHeight = imageHeight;
+        cropWidth = Math.floor(cropHeight * targetAspectRatio);
+    } else {
+        // Image is taller than passport ratio
+        cropWidth = imageWidth;
+        cropHeight = Math.floor(cropWidth / targetAspectRatio);
     }
-}
 
-/**
- * Detect face in image and get bounding box
- */
-async function detectFace(imageBuffer) {
-    try {
-        const detector = await initializeFaceDetector();
-
-        // Convert buffer to image data that MediaPipe can process
-        const image = sharp(imageBuffer);
-        const metadata = await image.metadata();
-        const { data, info } = await image
-            .ensureAlpha()
-            .raw()
-            .toBuffer({ resolveWithObject: true });
-
-        // Create ImageData-like object
-        const imageData = {
-            data: new Uint8ClampedArray(data),
-            width: info.width,
-            height: info.height
-        };
-
-        // Detect faces
-        const detections = detector.detect(imageData);
-
-        if (!detections.detections || detections.detections.length === 0) {
-            throw new Error('No face detected in the image');
-        }
-
-        // Get the first (most confident) face detection
-        const face = detections.detections[0];
-        const bbox = face.boundingBox;
-
-        return {
-            x: Math.max(0, Math.floor(bbox.originX)),
-            y: Math.max(0, Math.floor(bbox.originY)),
-            width: Math.floor(bbox.width),
-            height: Math.floor(bbox.height),
-            imageWidth: metadata.width,
-            imageHeight: metadata.height
-        };
-    } catch (error) {
-        console.error('Face detection error:', error.message);
-        throw error;
-    }
-}
-
-/**
- * Calculate crop area for passport photo (centered on face with proper margins)
- */
-function calculatePassportCrop(faceBox, imageWidth, imageHeight) {
-    const { x, y, width, height } = faceBox;
-
-    // Passport photo aspect ratio (3:4 approximately)
-    const targetAspectRatio = 35 / 45; // width/height for passport
-
-    // Add margins around face (30% on each side for passport standards)
-    const marginFactor = 1.8;
-    const faceWidth = width * marginFactor;
-    const faceHeight = faceWidth / targetAspectRatio;
-
-    // Center the crop on the face
-    const centerX = x + width / 2;
-    const centerY = y + height / 2;
-
-    let cropX = Math.max(0, Math.floor(centerX - faceWidth / 2));
-    let cropY = Math.max(0, Math.floor(centerY - faceHeight / 2));
-    let cropWidth = Math.min(Math.floor(faceWidth), imageWidth - cropX);
-    let cropHeight = Math.min(Math.floor(faceHeight), imageHeight - cropY);
+    // Center the crop
+    const left = Math.floor((imageWidth - cropWidth) / 2);
+    const top = Math.floor((imageHeight - cropHeight) / 2);
 
     return {
-        left: cropX,
-        top: cropY,
+        left: Math.max(0, left),
+        top: Math.max(0, top),
         width: cropWidth,
         height: cropHeight
     };
@@ -113,6 +37,7 @@ function calculatePassportCrop(faceBox, imageWidth, imageHeight) {
 
 /**
  * Generate passport photo from uploaded image
+ * Uses center crop and background removal - no face detection required
  */
 async function generatePassportPhoto(imagePath) {
     try {
@@ -121,16 +46,13 @@ async function generatePassportPhoto(imagePath) {
         // Read image
         const imageBuffer = await fs.readFile(imagePath);
 
-        // Detect face
-        const faceBox = await detectFace(imageBuffer);
-        console.log('✅ Face detected');
+        // Get image metadata
+        const metadata = await sharp(imageBuffer).metadata();
+        console.log(`📐 Image dimensions: ${metadata.width}x${metadata.height}`);
 
-        // Calculate crop area
-        const cropArea = calculatePassportCrop(
-            faceBox,
-            faceBox.imageWidth,
-            faceBox.imageHeight
-        );
+        // Calculate center crop area
+        const cropArea = calculateCenterCrop(metadata.width, metadata.height);
+        console.log('✅ Crop area calculated');
 
         // Remove background
         console.log('🔄 Removing background...');
@@ -155,17 +77,19 @@ async function generatePassportPhoto(imagePath) {
 
         return passportImage;
     } catch (error) {
+        console.error('❌ Passport processing error:', error);
+
         // Clean up on error
         try {
             await fs.unlink(imagePath);
         } catch (unlinkError) {
             console.error('Error deleting file:', unlinkError.message);
         }
-        throw error;
+
+        throw new Error(`Failed to process passport photo: ${error.message}`);
     }
 }
 
 module.exports = {
-    generatePassportPhoto,
-    initializeFaceDetector
+    generatePassportPhoto
 };
