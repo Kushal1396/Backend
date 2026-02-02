@@ -30,7 +30,7 @@ exports.generatePassportPhoto = async (req, res) => {
         // Log error to database
         try {
             await ErrorLog.create({
-                endpoint: '/api/passport/generate',
+                endpoint: '/api/passport/process',
                 method: 'POST',
                 errorMessage: error.message,
                 stackTrace: error.stack,

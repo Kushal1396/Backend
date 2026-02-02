@@ -4,21 +4,39 @@ const mongoose = require('mongoose');
 
 const PORT = process.env.PORT || 5000;
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => {
-    console.log('✅ MongoDB Connected Successfully');
-    
-    // Start server only after DB connection
-    app.listen(PORT, () => {
-      console.log(`🚀 FormPhotoAI Backend running on port ${PORT}`);
-      console.log(`📝 Environment: ${process.env.NODE_ENV}`);
+// MongoDB Connection (Optional for local development)
+if (process.env.MONGODB_URI) {
+  mongoose.connect(process.env.MONGODB_URI)
+    .then(() => {
+      console.log('✅ MongoDB Connected Successfully');
+
+      // Start server only after DB connection
+      app.listen(PORT, () => {
+        console.log(`🚀 FormPhotoAI Backend running on port ${PORT}`);
+        console.log(`📝 Environment: ${process.env.NODE_ENV}`);
+        console.log(`💾 Database: MongoDB Connected`);
+      });
+    })
+    .catch((err) => {
+      console.error('❌ MongoDB Connection Error:', err.message);
+      console.log('⚠️ Starting server without database...');
+
+      app.listen(PORT, () => {
+        console.log(`🚀 FormPhotoAI Backend running on port ${PORT}`);
+        console.log(`📝 Environment: ${process.env.NODE_ENV}`);
+        console.log(`⚠️ Database: Not Connected (Running without MongoDB)`);
+      });
     });
-  })
-  .catch((err) => {
-    console.error('❌ MongoDB Connection Error:', err.message);
-    process.exit(1);
+} else {
+  console.log('⚠️ MONGODB_URI not found in environment variables');
+  console.log('📦 Starting server without database...');
+
+  app.listen(PORT, () => {
+    console.log(`🚀 FormPhotoAI Backend running on port ${PORT}`);
+    console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`💾 Database: Not Connected (Running in standalone mode)`);
   });
+}
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
