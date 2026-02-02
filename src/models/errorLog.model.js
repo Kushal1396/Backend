@@ -1,11 +1,7 @@
 const mongoose = require('mongoose');
 
 const errorLogSchema = new mongoose.Schema({
-    endpoint: {
-        type: String,
-        required: true
-    },
-    method: {
+    toolName: {
         type: String,
         required: true
     },
@@ -16,14 +12,8 @@ const errorLogSchema = new mongoose.Schema({
     stackTrace: {
         type: String
     },
-    userIP: {
-        type: String
-    },
     userAgent: {
         type: String
-    },
-    requestBody: {
-        type: mongoose.Schema.Types.Mixed
     },
     timestamp: {
         type: Date,
@@ -35,7 +25,7 @@ const errorLogSchema = new mongoose.Schema({
 
 // Index for efficient querying
 errorLogSchema.index({ timestamp: -1 });
-errorLogSchema.index({ endpoint: 1 });
+errorLogSchema.index({ toolName: 1 });
 
 const ErrorLog = mongoose.model('ErrorLog', errorLogSchema);
 
