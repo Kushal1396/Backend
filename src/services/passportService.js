@@ -1,6 +1,16 @@
 const sharp = require('sharp');
-const { removeBackground } = require('@imgly/background-removal-node');
 const fs = require('fs').promises;
+
+// Try to load background removal, but make it optional
+let removeBackground = null;
+try {
+    const bgRemoval = require('@imgly/background-removal-node');
+    removeBackground = bgRemoval.removeBackground;
+    console.log('✅ Background removal library loaded');
+} catch (error) {
+    console.warn('⚠️ Background removal library not available:', error.message);
+    console.warn('⚠️ Will process images without background removal');
+}
 
 /**
  * Calculate center crop area for passport photo
@@ -37,7 +47,7 @@ function calculateCenterCrop(imageWidth, imageHeight) {
 
 /**
  * Generate passport photo from uploaded image
- * Uses center crop and background removal - no face detection required
+ * Uses center crop with optional background removal
  */
 async function generatePassportPhoto(imagePath) {
     try {
@@ -54,13 +64,25 @@ async function generatePassportPhoto(imagePath) {
         const cropArea = calculateCenterCrop(metadata.width, metadata.height);
         console.log('✅ Crop area calculated');
 
-        // Remove background
-        console.log('🔄 Removing background...');
-        const noBgBuffer = await removeBackground(imageBuffer);
+        let processedBuffer = imageBuffer;
+
+        // Try to remove background if library is available
+        if (removeBackground) {
+            try {
+                console.log('🔄 Removing background...');
+                processedBuffer = await removeBackground(imageBuffer);
+                console.log('✅ Background removed');
+            } catch (bgError) {
+                console.warn('⚠️ Background removal failed, continuing without it:', bgError.message);
+                // Continue with original image
+            }
+        } else {
+            console.log('⚠️ Skipping background removal (library not available)');
+        }
 
         // Process image: crop and resize to passport standards
         // Standard passport photo: 35mm x 45mm at 600 DPI = 827 x 1063 pixels
-        const passportImage = await sharp(noBgBuffer)
+        const passportImage = await sharp(processedBuffer)
             .extract(cropArea)
             .resize(827, 1063, {
                 fit: 'cover',
@@ -70,7 +92,7 @@ async function generatePassportPhoto(imagePath) {
             .jpeg({ quality: 95 })
             .toBuffer();
 
-        console.log('✅ Passport photo generated');
+        console.log('✅ Passport photo generated successfully');
 
         // Clean up uploaded file
         await fs.unlink(imagePath);
@@ -78,6 +100,7 @@ async function generatePassportPhoto(imagePath) {
         return passportImage;
     } catch (error) {
         console.error('❌ Passport processing error:', error);
+        console.error('Error stack:', error.stack);
 
         // Clean up on error
         try {
